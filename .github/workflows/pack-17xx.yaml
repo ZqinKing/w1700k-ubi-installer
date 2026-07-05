@@ -3,6 +3,14 @@ name: Gemtek 17xx UBI Installer (repackaging)
 on:
   workflow_dispatch:
     inputs:
+      device:
+        description: 'Device to build'
+        type: choice
+        default: 'w1701k'
+        options:
+          - w1701k
+          - w1700k
+          - all
       extra_packages:
         description: 'Additional packages for inner build (space separated)'
         default: 'luci'
@@ -13,27 +21,39 @@ env:
   IB_NAME: openwrt-imagebuilder-airoha-an7581.Linux-x86_64
 
 jobs:
+  prepare:
+    name: Select devices
+    runs-on: ubuntu-24.04
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+    steps:
+      - id: matrix
+        run: |
+          case "${{ github.event.inputs.device }}" in
+            w1700k)
+              matrix='[{"device":"w1700k","profile":"gemtek_w1700k-ubi","dtb":"an7581_gemtek_w1700k-u-boot.dtb","recovery":"openwrt-airoha-an7581-gemtek_w1700k-ubi-initramfs-recovery.itb","sysupgrade":"openwrt-airoha-an7581-gemtek_w1700k-ubi-squashfs-sysupgrade.itb","installer":"openwrt-airoha-an7581-gemtek_w1700k-ubi-initramfs-installer.itb"}]'
+              ;;
+            w1701k)
+              matrix='[{"device":"w1701k","profile":"gemtek_w1700k-ubi","dtb":"an7581_gemtek_w1700k-u-boot.dtb","fw_dir":"w1701-fw","recovery":"immortalwrt-airoha-an7581-gemtek_w1701k-ubi-initramfs-recovery.itb","sysupgrade":"immortalwrt-airoha-an7581-gemtek_w1701k-ubi-squashfs-sysupgrade.itb","installer":"immortalwrt-airoha-an7581-gemtek_w1701k-ubi-initramfs-installer.itb","uboot":"immortalwrt-airoha-an7581-gemtek_w1701k-ubi-chainload-uboot.itb"}]'
+              ;;
+            all)
+              matrix='[{"device":"w1700k","profile":"gemtek_w1700k-ubi","dtb":"an7581_gemtek_w1700k-u-boot.dtb","recovery":"openwrt-airoha-an7581-gemtek_w1700k-ubi-initramfs-recovery.itb","sysupgrade":"openwrt-airoha-an7581-gemtek_w1700k-ubi-squashfs-sysupgrade.itb","installer":"openwrt-airoha-an7581-gemtek_w1700k-ubi-initramfs-installer.itb"},{"device":"w1701k","profile":"gemtek_w1700k-ubi","dtb":"an7581_gemtek_w1700k-u-boot.dtb","fw_dir":"w1701-fw","recovery":"immortalwrt-airoha-an7581-gemtek_w1701k-ubi-initramfs-recovery.itb","sysupgrade":"immortalwrt-airoha-an7581-gemtek_w1701k-ubi-squashfs-sysupgrade.itb","installer":"immortalwrt-airoha-an7581-gemtek_w1701k-ubi-initramfs-installer.itb","uboot":"immortalwrt-airoha-an7581-gemtek_w1701k-ubi-chainload-uboot.itb"}]'
+              ;;
+            *)
+              echo "Unsupported device: ${{ github.event.inputs.device }}" >&2
+              exit 1
+              ;;
+          esac
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+
   build:
+    needs: prepare
     name: Build Installer for (${{ matrix.device }})
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - device: w1700k
-            profile: gemtek_w1700k-ubi
-            dtb: an7581_gemtek_w1700k-u-boot.dtb
-            recovery: openwrt-airoha-an7581-gemtek_w1700k-ubi-initramfs-recovery.itb
-            sysupgrade: openwrt-airoha-an7581-gemtek_w1700k-ubi-squashfs-sysupgrade.itb
-            installer: openwrt-airoha-an7581-gemtek_w1700k-ubi-initramfs-installer.itb
-          - device: w1701k
-            profile: gemtek_w1700k-ubi
-            dtb: an7581_gemtek_w1700k-u-boot.dtb
-            fw_dir: w1701-fw
-            recovery: immortalwrt-airoha-an7581-gemtek_w1701k-ubi-initramfs-recovery.itb
-            sysupgrade: immortalwrt-airoha-an7581-gemtek_w1701k-ubi-squashfs-sysupgrade.itb
-            installer: immortalwrt-airoha-an7581-gemtek_w1701k-ubi-initramfs-installer.itb
-            uboot: immortalwrt-airoha-an7581-gemtek_w1701k-ubi-chainload-uboot.itb
+        include: ${{ fromJSON(needs.prepare.outputs.matrix) }}
 
     steps:
       - name: Checkout installer repository
@@ -120,7 +140,7 @@ jobs:
           ../ib/scripts/mkits.sh \
             -A arm64 \
             -C none \
-            -v "6.12" \
+            -v "6.18" \
             -k "$ABS_KERNEL" \
             -a 0x80200000 \
             -e 0x80200000 \
