@@ -248,16 +248,13 @@ install_write_recovery() {
 }
 
 install_write_openwrt() {
-  ubimkvol /dev/ubi0 -n 4 -s 126976 -N fit
-  ubi_mknod ubi0_4
-
   # Load OpenWrt upgrade helpers only when needed
   . /lib/functions.sh
   . /lib/upgrade/common.sh
   . /lib/upgrade/nand.sh
   . /lib/upgrade/fit.sh
 
-  export CI_KERNPART=fit CI_UBIPART=ubi
+  export CI_KERNPART=fit CI_UBIPART=ibu
 
   log "Installing sysupgrade image via nand_upgrade_fit..."
   nand_upgrade_fit "$1" cat
