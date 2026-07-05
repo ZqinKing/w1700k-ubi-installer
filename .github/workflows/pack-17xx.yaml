@@ -124,16 +124,7 @@ jobs:
           cat > installer_work/initrd/init << 'EOF'
           #!/bin/sh
           export INITRAMFS=1
-
-          DIRS=$(echo *)
-          NEW_ROOT=/new_root
-
-          mkdir -p $NEW_ROOT
-          mount -t tmpfs tmpfs $NEW_ROOT
-
-          cp -pr $DIRS $NEW_ROOT
-
-          exec switch_root $NEW_ROOT /sbin/init
+          exec /sbin/init
           EOF
           chmod +x installer_work/initrd/init installer_work/initrd/installer/*.sh installer_work/initrd/lib/preinit/* 2>/dev/null || true
           # 4. Patch Device Tree
