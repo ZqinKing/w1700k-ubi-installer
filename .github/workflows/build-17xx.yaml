@@ -12,7 +12,7 @@ env:
 
 jobs:
   build:
-    name: Build OpenWrt (${{ matrix.device }})
+    name: Build Installer (${{ matrix.device }})
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
@@ -23,11 +23,20 @@ jobs:
             sysupgrade: openwrt-airoha-an7581-gemtek_w1700k-ubi-squashfs-sysupgrade.itb
             installer: openwrt-airoha-an7581-gemtek_w1700k-ubi-initramfs-installer.itb
             uboot: openwrt-airoha-an7581-gemtek_w1700k-ubi-chainload-uboot.itb
+            installer_source: openwrt-airoha-an7581-gemtek_w1700k-ubi-initramfs-recovery.itb
+          - device: w1701k
+            fw_dir: w1701-fw
+            recovery: immortalwrt-airoha-an7581-gemtek_w1701k-ubi-initramfs-recovery.itb
+            sysupgrade: immortalwrt-airoha-an7581-gemtek_w1701k-ubi-squashfs-sysupgrade.itb
+            installer: immortalwrt-airoha-an7581-gemtek_w1701k-ubi-initramfs-installer.itb
+            uboot: immortalwrt-airoha-an7581-gemtek_w1701k-ubi-chainload-uboot.itb
+            installer_source: openwrt-airoha-an7581-gemtek_w1700k-ubi-initramfs-recovery.itb
           - device: xr1710g
             recovery: openwrt-airoha-an7581-gemtek_xr1710g-ubi-initramfs-recovery.itb
             sysupgrade: openwrt-airoha-an7581-gemtek_xr1710g-ubi-squashfs-sysupgrade.itb
             installer: openwrt-airoha-an7581-gemtek_xr1710g-ubi-initramfs-installer.itb
             uboot: openwrt-airoha-an7581-gemtek_xr1710g-ubi-chainload-uboot.itb
+            installer_source: openwrt-airoha-an7581-gemtek_xr1710g-ubi-initramfs-recovery.itb
 
     steps:
       - name: Checkout installer repository
@@ -58,21 +67,30 @@ jobs:
           ./scripts/feeds update -a
           ./scripts/feeds install -a
 
-      - name: Inner Build
+      - name: Build payload firmware
         run: |
+          if [ -n "${{ matrix.fw_dir }}" ]; then
+            echo "Using precompiled firmware from ${{ matrix.fw_dir }}; skipping inner build."
+            exit 0
+          fi
           cd openwrt
           cp "../installer-repo/${{ env.INNER_CONFIG }}" .config
           make defconfig
           make -j"$(nproc)" download world
 
-      - name: Outer Build (Installer)
+      - name: Build installer image
         run: |
           cd openwrt
           cp "../installer-repo/${{ env.OUTER_CONFIG }}" .config
           make defconfig
           mkdir -p files/installer
-          cp "bin/targets/${{ env.TARGET_SUBTARGET }}/${{ matrix.recovery }}" "files/installer/"
-          cp "bin/targets/${{ env.TARGET_SUBTARGET }}/${{ matrix.sysupgrade }}" "files/installer/"
+          if [ -n "${{ matrix.fw_dir }}" ]; then
+            cp "../installer-repo/${{ matrix.fw_dir }}/${{ matrix.recovery }}" "files/installer/"
+            cp "../installer-repo/${{ matrix.fw_dir }}/${{ matrix.sysupgrade }}" "files/installer/"
+          else
+            cp "bin/targets/${{ env.TARGET_SUBTARGET }}/${{ matrix.recovery }}" "files/installer/"
+            cp "bin/targets/${{ env.TARGET_SUBTARGET }}/${{ matrix.sysupgrade }}" "files/installer/"
+          fi
           rsync -a ../installer-repo/files/ files/
           chmod +x files/installer/install.sh files/lib/preinit/00_installer
           make -j"$(nproc)"
@@ -80,8 +98,12 @@ jobs:
       - name: Prepare and Rename Artifacts
         run: |
           mkdir -p output/
-          cp "openwrt/bin/targets/${{ env.TARGET_SUBTARGET }}/${{ matrix.recovery }}" "output/${{ matrix.installer }}"
-          cp "openwrt/bin/targets/${{ env.TARGET_SUBTARGET }}/${{ matrix.uboot }}" "output/${{ matrix.uboot }}"
+          cp "openwrt/bin/targets/${{ env.TARGET_SUBTARGET }}/${{ matrix.installer_source }}" "output/${{ matrix.installer }}"
+          if [ -n "${{ matrix.fw_dir }}" ]; then
+            cp "installer-repo/${{ matrix.fw_dir }}/${{ matrix.uboot }}" "output/${{ matrix.uboot }}"
+          else
+            cp "openwrt/bin/targets/${{ env.TARGET_SUBTARGET }}/${{ matrix.uboot }}" "output/${{ matrix.uboot }}"
+          fi
 
       - name: Upload artifacts
         uses: actions/upload-artifact@main

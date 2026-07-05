@@ -22,7 +22,18 @@ jobs:
         include:
           - device: w1700k
             profile: gemtek_w1700k-ubi
+            dtb: an7581_gemtek_w1700k-u-boot.dtb
+            recovery: openwrt-airoha-an7581-gemtek_w1700k-ubi-initramfs-recovery.itb
+            sysupgrade: openwrt-airoha-an7581-gemtek_w1700k-ubi-squashfs-sysupgrade.itb
             installer: openwrt-airoha-an7581-gemtek_w1700k-ubi-initramfs-installer.itb
+          - device: w1701k
+            profile: gemtek_w1700k-ubi
+            dtb: an7581_gemtek_w1700k-u-boot.dtb
+            fw_dir: w1701-fw
+            recovery: immortalwrt-airoha-an7581-gemtek_w1701k-ubi-initramfs-recovery.itb
+            sysupgrade: immortalwrt-airoha-an7581-gemtek_w1701k-ubi-squashfs-sysupgrade.itb
+            installer: immortalwrt-airoha-an7581-gemtek_w1701k-ubi-initramfs-installer.itb
+            uboot: immortalwrt-airoha-an7581-gemtek_w1701k-ubi-chainload-uboot.itb
 
     steps:
       - name: Checkout installer repository
@@ -39,7 +50,7 @@ jobs:
           tar -I zstd -xf *.tar.zst
           mv ${{ env.IB_NAME }} ib
 
-      - name: Create skeleton rootfs
+      - name: Prepare installer base rootfs
         run: |
           cd ib
           make image PROFILE=${{ matrix.profile }}
@@ -47,21 +58,28 @@ jobs:
           mkdir -p ../installer_skeleton
           cp -pPR "$IB_ROOT/." ../installer_skeleton/
 
-      - name: Create Inner Build
+      - name: Stage payload images
         run: |
           cd ib
-          make image PROFILE=${{ matrix.profile }} PACKAGES="${{ github.event.inputs.extra_packages }}"
           mkdir -p ../staging
-          cp bin/targets/airoha/an7581/*sysupgrade.itb ../staging/sysupgrade.itb
           mkdir -p ../output
-          cp bin/targets/airoha/an7581/*uboot* ../output/ || true
+          if [ -n "${{ matrix.fw_dir }}" ]; then
+            cp "../${{ matrix.fw_dir }}/${{ matrix.recovery }}" ../staging/
+            cp "../${{ matrix.fw_dir }}/${{ matrix.sysupgrade }}" ../staging/
+            cp "../${{ matrix.fw_dir }}/${{ matrix.uboot }}" ../output/
+          else
+            make image PROFILE=${{ matrix.profile }} PACKAGES="${{ github.event.inputs.extra_packages }}"
+            cp bin/targets/airoha/an7581/*initramfs-recovery.itb "../staging/${{ matrix.recovery }}"
+            cp bin/targets/airoha/an7581/*sysupgrade.itb "../staging/${{ matrix.sysupgrade }}"
+            cp bin/targets/airoha/an7581/*uboot* ../output/ || true
+          fi
 
-      - name: Outer Build (Repackage Installer)
+      - name: Repackage installer image
         run: |
           # 1. Ingredient Discovery
           BIN_DIR="ib/bin/targets/airoha/an7581"
           STAGING_IMG_DIR=$(find ib/staging_dir -name "image" -type d | grep "target-" | head -n 1)
-          DTB_SOURCE=$(find "$STAGING_IMG_DIR" -name "an7581_gemtek_w1700k-u-boot.dtb" | head -n 1)
+          DTB_SOURCE=$(find "$STAGING_IMG_DIR" -name "${{ matrix.dtb }}" | head -n 1)
           KERNEL_BIN=$(find ib/build_dir -name "Image" | head -n 1)
           # Fallback check for Kernel
           if [ -z "$KERNEL_BIN" ]; then
@@ -78,7 +96,8 @@ jobs:
           cp -pPR installer_skeleton/. installer_work/initrd/
           # 3. Inject payload and universal files
           mkdir -p installer_work/initrd/installer
-          cp staging/sysupgrade.itb installer_work/initrd/installer/
+          cp "staging/${{ matrix.recovery }}" installer_work/initrd/installer/
+          cp "staging/${{ matrix.sysupgrade }}" installer_work/initrd/installer/
           if [ -d "files" ]; then
             cp -pPR files/. installer_work/initrd/
           fi
