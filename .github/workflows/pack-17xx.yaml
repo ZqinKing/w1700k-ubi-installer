@@ -152,7 +152,7 @@ jobs:
             -i ./installer.initrd \
             -o installer.its
           # 7. Final Pack
-          mkimage -E -B 0x1000 -f installer.its ../output/${{ matrix.installer }}
+          mkimage -f installer.its ../output/${{ matrix.installer }}
 
       - name: Upload artifacts
         uses: actions/upload-artifact@main
