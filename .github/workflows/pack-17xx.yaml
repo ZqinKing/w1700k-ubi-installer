@@ -134,7 +134,7 @@ jobs:
           dtc -I dts -O dtb -o installer.dtb installer.dts
           # 5. Pack Initramfs
           cd initrd
-          find . | LC_ALL=C sort | cpio --reproducible -o -H newc -R 0:0 | gzip -9n > ../installer.initrd
+          find . | LC_ALL=C sort | cpio --reproducible -o -H newc -R 0:0 > ../installer.initrd
           cd ..
           # 6. Generate ITS and Final ITB using absolute kernel path
           ../ib/scripts/mkits.sh \
