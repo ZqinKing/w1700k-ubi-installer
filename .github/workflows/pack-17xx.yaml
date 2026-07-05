@@ -121,12 +121,60 @@ jobs:
           if [ -d "files" ]; then
             cp -pPR files/. installer_work/initrd/
           fi
+          # Keep the installer initramfs minimal. The normal imagebuilder rootfs
+          # carries module autoload state that can spawn early modprobe before
+          # the NAND writer starts, and this installer only needs built-in NAND
+          # support plus userspace UBI/upgrade tools.
+          rm -rf \
+            installer_work/initrd/lib/modules \
+            installer_work/initrd/lib/firmware \
+            installer_work/initrd/etc/modules.conf \
+            installer_work/initrd/etc/modules.d \
+            installer_work/initrd/etc/modules-boot.d
+          rm -f \
+            installer_work/initrd/sbin/modprobe \
+            installer_work/initrd/sbin/insmod \
+            installer_work/initrd/sbin/rmmod
+          rm -f \
+            installer_work/initrd/etc/rc.d/*dropbear* \
+            installer_work/initrd/etc/rc.d/*dnsmasq* \
+            installer_work/initrd/etc/rc.d/*firewall* \
+            installer_work/initrd/etc/rc.d/*network* \
+            installer_work/initrd/etc/rc.d/*odhcpd* \
+            installer_work/initrd/etc/rc.d/*uhttpd* \
+            installer_work/initrd/etc/rc.d/*wpad*
           cat > installer_work/initrd/init << 'EOF'
           #!/bin/sh
           export INITRAMFS=1
           exec /sbin/init
           EOF
           chmod +x installer_work/initrd/init installer_work/initrd/installer/*.sh installer_work/initrd/lib/preinit/* 2>/dev/null || true
+          need_one() {
+            name="$1"
+            shift
+            for path in "$@"; do
+              if [ -e "installer_work/initrd$path" ]; then
+                return 0
+              fi
+            done
+            echo "ERROR: missing required tool: $name" >&2
+            exit 1
+          }
+          need_one sh /bin/sh
+          need_one init /sbin/init
+          need_one ubiformat /sbin/ubiformat /usr/sbin/ubiformat
+          need_one ubiattach /sbin/ubiattach /usr/sbin/ubiattach
+          need_one ubimkvol /sbin/ubimkvol /usr/sbin/ubimkvol
+          need_one ubiupdatevol /sbin/ubiupdatevol /usr/sbin/ubiupdatevol
+          need_one ubinfo /sbin/ubinfo /usr/sbin/ubinfo
+          need_one hexdump /bin/hexdump /usr/bin/hexdump
+          need_one strings /bin/strings /usr/bin/strings
+          need_one nand.sh /lib/upgrade/nand.sh
+          need_one fit.sh /lib/upgrade/fit.sh
+          if [ -e installer_work/initrd/sbin/modprobe ]; then
+            echo "ERROR: modprobe should not be present in installer initramfs" >&2
+            exit 1
+          fi
           # 4. Patch Device Tree
           # We store absolute paths before entering the subdirectory
           ABS_DTB=$(realpath "$DTB_SOURCE")
@@ -141,6 +189,11 @@ jobs:
           cd initrd
           find . | LC_ALL=C sort | cpio --reproducible -o -H newc -R 0:0 > ../installer.initrd
           cd ..
+          du -h installer.initrd
+          if cpio -it < installer.initrd | grep -E '\.ko$|lib/firmware|etc/modules|sbin/(modprobe|insmod|rmmod)$'; then
+            echo "ERROR: installer initramfs still contains module autoload files" >&2
+            exit 1
+          fi
           # 6. Generate ITS and Final ITB using absolute kernel path
           ../ib/scripts/mkits.sh \
             -A arm64 \
