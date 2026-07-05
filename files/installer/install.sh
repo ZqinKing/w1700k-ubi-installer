@@ -84,20 +84,23 @@ detect_device() {
   case "$SERIAL_NUMBER" in
     W1700K*)
       DEV_MODEL="w1700k"
+      FW_PREFIX="openwrt"
       ;;
     W1701K*)
       DEV_MODEL="w1701k"
+      FW_PREFIX="immortalwrt"
       ;;
     XR1710G*)
       DEV_MODEL="xr1710g"
+      FW_PREFIX="openwrt"
       ;;
     *)
       die "Unsupported device serial: $SERIAL_NUMBER"
       ;;
   esac
 
-  RECOVERY_IMAGE="${INSTALLER_DIR}/openwrt-airoha-an7581-gemtek_${DEV_MODEL}-ubi-initramfs-recovery.itb"
-  SYSUPGRADE_IMAGE="${INSTALLER_DIR}/openwrt-airoha-an7581-gemtek_${DEV_MODEL}-ubi-squashfs-sysupgrade.itb"
+  RECOVERY_IMAGE="${INSTALLER_DIR}/${FW_PREFIX}-airoha-an7581-gemtek_${DEV_MODEL}-ubi-initramfs-recovery.itb"
+  SYSUPGRADE_IMAGE="${INSTALLER_DIR}/${FW_PREFIX}-airoha-an7581-gemtek_${DEV_MODEL}-ubi-squashfs-sysupgrade.itb"
   log "Detected $DEV_MODEL via serial number."
 }
 
